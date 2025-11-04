@@ -139,7 +139,7 @@ Uploading is optional — the app will auto-load the local CSV if present.
 
 # ---------- Option A: local CSV first, upload optional ----------
 uploaded = st.file_uploader("Upload program_ratings.csv (optional)", type=["csv"])
-default_csv = Path(_file_).parent / "program_ratings.csv"
+default_csv = Path(__file__).parent / "program_ratings.csv"
 
 if uploaded is not None:
     df, programs, hour_cols = load_ratings(uploaded)
