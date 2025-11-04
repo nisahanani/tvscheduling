@@ -1,25 +1,28 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import random
 from typing import List, Tuple, Dict
-from pathlib import Path  # <-- added
+from pathlib import Path
 
 # =========================
-# Data loading
+# Data loading & utilities
 # =========================
-@st.cache_data
-def load_ratings(csv_path: str) -> Tuple[pd.DataFrame, List[str], List[str]]:
+def load_ratings(csv_path_or_file) -> Tuple[pd.DataFrame, List[str], List[str]]:
     """
     Loads ratings CSV with columns:
         "Type of Program", "Hour 6", "Hour 7", ... "Hour 23"
+    Accepts a path string or an UploadedFile/file-like object.
     Returns (df, programs, hour_cols)
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path_or_file)
     if "Type of Program" not in df.columns:
         raise ValueError("CSV must include a 'Type of Program' column.")
     # Hour columns are all except the first
     hour_cols = [c for c in df.columns if c != "Type of Program"]
-    programs = df["Type of Program"].tolist()
+    if len(hour_cols) == 0:
+        raise ValueError("CSV must include hour columns (e.g. 'Hour 6', 'Hour 7', ...).")
+    programs = df["Type of Program"].astype(str).tolist()
     return df, programs, hour_cols
 
 def fitness(schedule: List[str], df: pd.DataFrame, hour_cols: List[str]) -> float:
@@ -27,7 +30,7 @@ def fitness(schedule: List[str], df: pd.DataFrame, hour_cols: List[str]) -> floa
     Sum of ratings for chosen program at each hour.
     schedule length must equal len(hour_cols).
     """
-    program_to_row = {p: i for i, p in enumerate(df["Type of Program"])}
+    program_to_row = {p: i for i, p in enumerate(df["Type of Program"].astype(str))}
     total = 0.0
     for idx, program in enumerate(schedule):
         row_i = program_to_row[program]
@@ -112,7 +115,7 @@ def run_ga(
     }
 
 def render_schedule_table(schedule: List[str], df: pd.DataFrame, hour_cols: List[str]) -> pd.DataFrame:
-    program_to_row = {p: i for i, p in enumerate(df["Type of Program"])}
+    program_to_row = {p: i for i, p in enumerate(df["Type of Program"].astype(str))}
     rows = []
     for idx, program in enumerate(schedule):
         hour_label = hour_cols[idx]
@@ -139,12 +142,26 @@ Uploading is optional — the app will auto-load the local CSV if present.
 
 # ---------- Option A: local CSV first, upload optional ----------
 uploaded = st.file_uploader("Upload program_ratings.csv (optional)", type=["csv"])
-default_csv = Path(_file_).parent / "program_ratings.csv"
+
+# Use __file__ (two underscores) — with fallback to cwd if __file__ is not defined.
+try:
+    default_csv = Path(__file__).parent / "program_ratings.csv"
+except NameError:
+    # __file__ may not exist in some interactive environments; use current working dir instead
+    default_csv = Path.cwd() / "program_ratings.csv"
 
 if uploaded is not None:
-    df, programs, hour_cols = load_ratings(uploaded)
+    try:
+        df, programs, hour_cols = load_ratings(uploaded)
+    except Exception as e:
+        st.error(f"Error reading uploaded CSV: {e}")
+        st.stop()
 elif default_csv.exists():
-    df, programs, hour_cols = load_ratings(str(default_csv))
+    try:
+        df, programs, hour_cols = load_ratings(str(default_csv))
+    except Exception as e:
+        st.error(f"Error reading default CSV ({default_csv}): {e}")
+        st.stop()
 else:
     st.error("No CSV found. Upload a file or add program_ratings.csv to the same folder as app.py.")
     st.stop()
@@ -183,20 +200,23 @@ if st.button("Run All 3 Trials 🚀", use_container_width=True):
 
     for label, co, mu in trials:
         st.markdown(f"### {label}")
-        result = run_ga(
-            df, programs, hour_cols,
-            generations=int(gen),
-            pop_size=int(pop),
-            crossover_rate=float(co),
-            mutation_rate=float(mu),
-            elitism=int(elit),
-            tournament_k=int(tourn),
-        )
+        with st.spinner(f"Running {label} (CO_R={co:.2f}, MUT_R={mu:.2f})..."):
+            result = run_ga(
+                df, programs, hour_cols,
+                generations=int(gen),
+                pop_size=int(pop),
+                crossover_rate=float(co),
+                mutation_rate=float(mu),
+                elitism=int(elit),
+                tournament_k=int(tourn),
+            )
         schedule = result["best_schedule"]
         score = result["best_score"]
         table = render_schedule_table(schedule, df, hour_cols)
         st.dataframe(table, use_container_width=True)
         st.metric(label="Total Ratings (Fitness)", value=round(score, 4))
+        csv_bytes = table.to_csv(index=False).encode("utf-8")
+        st.download_button(label=f"Download {label} CSV", data=csv_bytes, file_name=f"{label.replace(' ', '_')}_schedule.csv", mime="text/csv")
         st.caption(f"CO_R = {co:.2f}, MUT_R = {mu:.2f}, GEN = {gen}, POP = {pop}, ELIT = {elit}, TOURN = {tourn}")
         st.markdown("---")
 
