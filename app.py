@@ -142,10 +142,6 @@ except NameError:
     # __file__ may not exist in some interactive environments; use current working dir instead
     default_csv = Path.cwd() / "program_ratings.csv"
 
-if uploaded is not None:
-    try:
-        df, programs, hour_cols = load_ratings(uploaded)
-    except Exception as e:
         st.error(f"Error reading uploaded CSV: {e}")
         st.stop()
 elif default_csv.exists():
