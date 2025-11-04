@@ -132,16 +132,8 @@ def render_schedule_table(schedule: List[str], df: pd.DataFrame, hour_cols: List
 # =========================
 # Streamlit UI
 # =========================
-st.set_page_config(page_title="GA TV Scheduling", page_icon="🧬", layout="wide")
-st.title("🧬 Genetic Algorithm — TV Scheduling")
-
-st.markdown("""
-Keep *program_ratings.csv* in the *same folder* as app.py (GitHub repo root).  
-Uploading is optional — the app will auto-load the local CSV if present.
-""")
-
-# ---------- Option A: local CSV first, upload optional ----------
-uploaded = st.file_uploader("Upload program_ratings.csv (optional)", type=["csv"])
+st.set_page_config(page_title="GA TV Scheduling")
+st.title(" Genetic Algorithm — TV Scheduling")
 
 # Use __file__ (two underscores) — with fallback to cwd if __file__ is not defined.
 try:
@@ -219,5 +211,3 @@ if st.button("Run All 3 Trials 🚀", use_container_width=True):
         st.download_button(label=f"Download {label} CSV", data=csv_bytes, file_name=f"{label.replace(' ', '_')}_schedule.csv", mime="text/csv")
         st.caption(f"CO_R = {co:.2f}, MUT_R = {mu:.2f}, GEN = {gen}, POP = {pop}, ELIT = {elit}, TOURN = {tourn}")
         st.markdown("---")
-
-st.info("Tip: Keep the CSV in the repo so it auto-loads on Streamlit Cloud. Upload only if you want to test another file.")
