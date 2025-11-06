@@ -34,7 +34,7 @@ def fitness(schedule: List[str], df: pd.DataFrame, hour_cols: List[str]) -> floa
         total += float(df.at[row_i, hour_col])
     return total
 
-# ---------- RNG-aware operators ----------
+# ---------- RNG-aware GA operators ----------
 def random_schedule(programs: List[str], num_hours: int, rng: random.Random) -> List[str]:
     # Allow repeats — a program can appear in multiple hours
     return [rng.choice(programs) for _ in range(num_hours)]
@@ -46,18 +46,18 @@ def single_point_crossover(p1: List[str], p2: List[str], rng: random.Random) -> 
     return p1[:cut] + p2[cut:], p2[:cut] + p1[cut:]
 
 def mutate(schedule: List[str], programs: List[str], rng: random.Random) -> List[str]:
-    # Mutate exactly one gene position
+    # Mutate exactly one gene position (keeps your original intent)
     i = rng.randrange(len(schedule))
-    schedule = schedule[:]  # copy before mutate
-    schedule[i] = rng.choice(programs)
-    return schedule
+    child = schedule[:]
+    child[i] = rng.choice(programs)
+    return child
 
-def tournament_selection(pop: List[List[str]], df: pd.DataFrame, hour_cols: List[str], rng: random.Random, k: int = 3) -> List[str]:
-    # Sample k candidates without replacement (cap at len(pop))
+def tournament_selection(pop: List[List[str]], df: pd.DataFrame, hour_cols: List[str],
+                         rng: random.Random, k: int = 3) -> List[str]:
     k = min(k, len(pop))
     idxs = rng.sample(range(len(pop)), k)
     candidates = [pop[i] for i in idxs]
-    # Stable sort: tie-break by genotype to keep deterministic order
+    # Stable sort: tie-break by genotype so order is deterministic
     candidates.sort(key=lambda s: (fitness(s, df, hour_cols), tuple(s)), reverse=True)
     return candidates[0]
 
@@ -71,28 +71,26 @@ def run_ga(
     mutation_rate: float = 0.2,
     elitism: int = 2,
     tournament_k: int = 3,
-    seed: int = 42,  # <--- NEW
+    seed: int = 42,
 ) -> Dict:
-    rng = random.Random(seed)  # local RNG, reproducible per run
+    rng = random.Random(seed)  # local RNG per run (reproducible)
     num_hours = len(hour_cols)
 
     # Initialize population
     population = [random_schedule(programs, num_hours, rng) for _ in range(pop_size)]
-
-    # Track best
+    # Sort once so best is deterministic
     population.sort(key=lambda s: (fitness(s, df, hour_cols), tuple(s)), reverse=True)
     best = population[0][:]
     best_score = fitness(best, df, hour_cols)
 
     for _ in range(generations):
         new_pop = []
-        # Elitism (copy to avoid aliasing)
+        # Elitism (copy)
         elites = [ind[:] for ind in population[:elitism]]
         new_pop.extend(elites)
 
         # Fill the rest
         while len(new_pop) < pop_size:
-            # Parent selection
             p1 = tournament_selection(population, df, hour_cols, rng, k=tournament_k)
             p2 = tournament_selection(population, df, hour_cols, rng, k=tournament_k)
 
@@ -102,7 +100,7 @@ def run_ga(
             else:
                 c1, c2 = p1[:], p2[:]
 
-            # Mutation (per-child probability, same as your original intent)
+            # Mutation (per-child probability)
             if rng.random() < mutation_rate:
                 c1 = mutate(c1, programs, rng)
             if rng.random() < mutation_rate:
@@ -112,14 +110,15 @@ def run_ga(
             if len(new_pop) < pop_size:
                 new_pop.append(c2)
 
-        # Prepare next generation
         population = new_pop
         population.sort(key=lambda s: (fitness(s, df, hour_cols), tuple(s)), reverse=True)
 
         # Update global best
-        if (fs := fitness(population[0], df, hour_cols)) > best_score:
-            best_score = fs
-            best = population[0][:]
+        top = population[0]
+        top_score = fitness(top, df, hour_cols)
+        if top_score > best_score:
+            best_score = top_score
+            best = top[:]
 
     return {"best_schedule": best, "best_score": best_score}
 
@@ -143,34 +142,14 @@ def render_schedule_table(schedule: List[str], df: pd.DataFrame, hour_cols: List
 st.set_page_config(page_title="GA TV Scheduling", layout="wide")
 st.title("Genetic Algorithm — TV Scheduling")
 
-# ---- CSV loading: _file_ may not exist on Streamlit Cloud, fall back to uploader ----
-default_csv = None
-try:
-    # _file_ exists in local runs; not guaranteed on every platform
-    here = Path(_file_).parent
-    candidate = here / "program_ratings.csv"
-    if candidate.exists():
-        default_csv = str(candidate)
-except NameError:
-    pass
-
-csv_path = None
-if default_csv:
-    csv_path = default_csv
-else:
-    st.info("Upload your ratings CSV (must include a 'Type of Program' column).")
-    up = st.file_uploader("Upload CSV", type=["csv"])
-    if up is not None:
-        # Save to tmp file for caching to work
-        tmp = Path("uploaded_program_ratings.csv")
-        tmp.write_bytes(up.read())
-        csv_path = str(tmp)
-
-if not csv_path:
-    st.error("No CSV provided. Please place 'program_ratings.csv' next to the app or upload it above.")
+# ---- Load CSV automatically (no upload step) ----
+csv_path = Path("program_ratings.csv")
+if not csv_path.exists():
+    st.error("Missing file: 'program_ratings.csv' not found in the same folder as app.py.")
     st.stop()
 
-df, programs, hour_cols = load_ratings(csv_path)
+df, programs, hour_cols = load_ratings(str(csv_path))
+st.success("✅ Loaded 'program_ratings.csv' successfully!")
 
 # ------------------- Trials & Seeds -------------------
 st.subheader("Parameters")
@@ -179,7 +158,7 @@ col_a, col_b, col_c = st.columns(3)
 with col_a:
     st.markdown("*Trial 1*")
     co1 = st.slider("CO_R (Trial 1)", 0.0, 0.95, 0.80, 0.01, key="co1")
-    mu1 = st.slider("MUT_R (Trial 1)", 0.01, 0.05, 0.02, 0.01, key="mu1")
+    mu1 = st.slider("MUT_R (Trial 1)", 0.01, 0.05, 0.20, 0.01, key="mu1")  # default 0.2 per brief
     s1  = st.number_input("Seed (Trial 1)", value=123, step=1, key="s1")
 
 with col_b:
@@ -206,7 +185,7 @@ with colg3:
 with colg4:
     tourn = st.number_input("Tournament Size (k)", min_value=2, max_value=10, value=3, step=1)
 
-if st.button("Run All 3 Trials", use_container_width=True):
+if st.button("Run All 3 Trials 🚀", use_container_width=True):
     trials = [
         ("Trial 1", co1, mu1, s1),
         ("Trial 2", co2, mu2, s2),
@@ -223,11 +202,12 @@ if st.button("Run All 3 Trials", use_container_width=True):
             mutation_rate=float(mu),
             elitism=int(elit),
             tournament_k=int(tourn),
-            seed=int(seed),  # <--- reproducible per trial
+            seed=int(seed),
         )
         schedule = result["best_schedule"]
         score = result["best_score"]
         table = render_schedule_table(schedule, df, hour_cols)
+
         st.dataframe(table, use_container_width=True)
         st.metric(label="Total Ratings (Fitness)", value=round(score, 4))
         st.caption(
