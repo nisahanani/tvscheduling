@@ -166,7 +166,7 @@ pop = st.number_input("Population Size (POP)", min_value=10, max_value=500, valu
 elit = st.number_input("Elitism Size", min_value=0, max_value=10, value=2, step=1)
 tourn = st.number_input("Tournament Size (k)", min_value=2, max_value=10, value=3, step=1)
 
-if st.button("Run All 3 Trials 🚀", use_container_width=True):
+if st.button("Run All 3 Trials", use_container_width=True):
     trials = [
         ("Trial 1", co1, mu1),
         ("Trial 2", co2, mu2),
