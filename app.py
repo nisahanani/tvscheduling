@@ -167,7 +167,7 @@ else:
         csv_path = str(tmp)
 
 if not csv_path:
-    st.error(" CSV exist.")
+    st.error("No CSV provided. Please place 'program_ratings.csv' next to the app or upload it above.")
     st.stop()
 
 df, programs, hour_cols = load_ratings(csv_path)
