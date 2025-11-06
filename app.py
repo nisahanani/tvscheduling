@@ -132,21 +132,13 @@ def render_schedule_table(schedule: List[str], df: pd.DataFrame, hour_cols: List
 st.set_page_config(page_title="GA TV Scheduling")
 st.title(" Genetic Algorithm — TV Scheduling")
 
-st.markdown("""
-Keep *program_ratings.csv* in the *same folder* as app.py (GitHub repo root).  
-Uploading is optional — the app will auto-load the local CSV if present.
-""")
-
 # ---------- Option A: local CSV first, upload optional ----------
-uploaded = st.file_uploader("Upload program_ratings.csv (optional)", type=["csv"])
 default_csv = Path(__file__).parent / "program_ratings.csv"
 
-if uploaded is not None:
-    df, programs, hour_cols = load_ratings(uploaded)
-elif default_csv.exists():
+if default_csv.exists():
     df, programs, hour_cols = load_ratings(str(default_csv))
 else:
-    st.error("No CSV found. Upload a file or add program_ratings.csv to the same folder as app.py.")
+    st.error("CSV exist.")
     st.stop()
 # ---------------------------------------------------------------
 
